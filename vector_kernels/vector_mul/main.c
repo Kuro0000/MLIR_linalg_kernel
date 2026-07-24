@@ -1,0 +1,127 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h> 
+
+typedef struct {
+  float *allocated;
+  float *aligned;
+  long long offset;
+  long long sizes[1];
+  long long strides[1];
+} StridedMemRefType_f32_1D;
+
+extern void _mlir_ciface_vector_mul(StridedMemRefType_f32_1D *out,
+                                       StridedMemRefType_f32_1D *A,
+                                       StridedMemRefType_f32_1D *B);
+
+static StridedMemRefType_f32_1D make_memref_1d(long long N) {
+  StridedMemRefType_f32_1D mr;
+  size_t bytes = (size_t)N * sizeof(float);
+  float *data = (float*)aligned_alloc(64, bytes);
+  mr.allocated = mr.aligned = data;
+  mr.offset    = 0;
+  mr.sizes[0]  = N;
+  mr.strides[0]= 1;
+  return mr;
+}
+
+// Libera la memoria
+static void free_memref(StridedMemRefType_f32_1D *mr) {
+  free(mr->allocated);
+  mr->allocated = mr->aligned = NULL;
+}
+
+// Riempie il vettore con valori casuali [-10, 10]
+static void random_fill(StridedMemRefType_f32_1D *mr, unsigned seed) {
+  srand(seed);
+  long long N = mr->sizes[0];
+  for (long long i = 0; i < N; i++) {
+    mr->aligned[mr->offset + i * mr->strides[0]] =
+        (float)((rand() % 2001) - 1000) / 100.0f;
+  }
+}
+
+//Golden Model 
+static void ref_vector_mul(const StridedMemRefType_f32_1D *A,
+                              const StridedMemRefType_f32_1D *B,
+                              StridedMemRefType_f32_1D *C) {
+  long long len = A->sizes[0];
+  for (long long i = 0; i < len; ++i) {
+    float a = A->aligned[A->offset + i * A->strides[0]];
+    float b = B->aligned[B->offset + i * B->strides[0]];
+    C->aligned[C->offset + i * C->strides[0]] = a * b;
+  }
+}
+
+// Calcola l'errore tra il risultato MLIR e il Golden Model
+static double error_check(const StridedMemRefType_f32_1D *X,
+                          const StridedMemRefType_f32_1D *Ref) {
+  long long N = X->sizes[0];
+  double s = 0.0;
+  for (long long i = 0; i < N; i++) {
+      double dx = (double)X->aligned[X->offset + i * X->strides[0]]
+                - (double)Ref->aligned[Ref->offset + i * Ref->strides[0]];
+      s += dx * dx;
+  }
+  return s;
+}
+
+
+// Stampa il vettore (utile per debug)
+static void print_vector(StridedMemRefType_f32_1D *vec, const char *name, int max_print) {
+    printf("%s = [", name);
+    long long N = vec->sizes[0];
+    int print_count = (N < max_print) ? N : max_print;
+    
+    for (long long i = 0; i < print_count; i++) {
+        printf("%s%.3f", i > 0 ? ", " : "", 
+               vec->aligned[vec->offset + i * vec->strides[0]]);
+    }
+    if (N > max_print) {
+        printf(", ...");
+    }
+    printf("]\n");
+}
+
+
+int main(int argc, char **argv) {
+  long long N = 64; 
+  if (argc == 2) { N = atoll(argv[1]); }
+
+  srand(time(NULL));
+
+  StridedMemRefType_f32_1D A = make_memref_1d(N);
+  StridedMemRefType_f32_1D B = make_memref_1d(N);
+  StridedMemRefType_f32_1D C = make_memref_1d(N);
+  StridedMemRefType_f32_1D Cref = make_memref_1d(N);
+
+  printf("=== INIZIO TEST VECTOR SET (Dimensione: %lld) ===\n\n", N);
+
+  for(int test = 1; test <= 3; test++) {
+      random_fill(&A, 13);
+      random_fill(&B, 17);
+
+      // Esecuzione MLIR passando il valore scalare
+      _mlir_ciface_vector_mul(&C, &A, &B);
+      
+      // Esecuzione Golden Standard in C passando lo stesso valore scalare
+      ref_vector_mul(&A, &B, &Cref);
+      
+      // Controllo dell'errore tra MLIR (C) e Golden Model (Cref)
+      double err = error_check(&C, &Cref);
+      printf("Errore: %.6e\n", err);
+      print_vector(&A, "A input", 8);
+      print_vector(&B, "B input", 8);
+      print_vector(&C, "C (MLIR)", 8);
+      print_vector(&Cref, "Cref (Golden)", 8);
+      if (err < 1e-3) {
+          printf("Esito: SUPERATO, Errore = %e\n\n", err);
+      } else {
+          printf("Esito: FALLITO, Errore = %e\n\n", err);
+      }
+  }
+
+  free_memref(&A); free_memref(&B); free_memref(&C); free_memref(&Cref);
+  
+  return 0;
+}
