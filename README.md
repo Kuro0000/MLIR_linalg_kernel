@@ -5,7 +5,6 @@
 ![Arch](https://img.shields.io/badge/Architecture-x86%20%7C%20ARM%20%7C%20RISC--V-orange.svg)
 ![Status](https://img.shields.io/badge/Status-Completed-brightgreen.svg)
 
-**Author:** Andrea Yang  
 
 This repository contains the source code and experimental results of my thesis project: *"Design and optimization of linear algebra kernels for heterogeneous architectures based on the MLIR framework"*.
 
