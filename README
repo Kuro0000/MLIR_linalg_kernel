@@ -1,0 +1,66 @@
+# 🧬 Progettazione e Ottimizzazione di Kernel di Algebra Lineare in MLIR
+
+![MLIR](https://img.shields.io/badge/Framework-MLIR-blue.svg)
+![LLVM](https://img.shields.io/badge/Backend-LLVM-success.svg)
+![Arch](https://img.shields.io/badge/Architecture-x86%20%7C%20ARM%20%7C%20RISC--V-orange.svg)
+![Status](https://img.shields.io/badge/Status-Completed-brightgreen.svg)
+
+**Autore:** Andrea Yang  
+**Relatore:** Prof. Tagliavini  
+
+Questo repository contiene il codice sorgente e i risultati sperimentali del mio progetto di tesi: *"Progettazione e ottimizzazione di kernel di algebra lineare per architetture eterogenee basate su framework MLIR"*.
+
+---
+
+## 🎯 Obiettivo del Progetto
+
+Con il declino della Legge di Moore e l'aggravarsi del *memory wall*, il panorama hardware si sta spostando verso architetture eterogenee e specializzate (GPU, NPU, RISC-V). I compilatori tradizionali faticano a scalare su questa complessità, generando il problema della frammentazione "N per M".
+
+Questo progetto esplora una soluzione basata su **MLIR (Multi-Level Intermediate Representation)**: esprimere gli algoritmi di algebra lineare attraverso costrutti astratti e dichiarativi (dialetti `tensor` e `linalg`), disaccoppiandoli dall'architettura hardware sottostante. Questo permette di mantenere la semantica matematica dell'operazione, rendendo i kernel modulari, ottimizzabili e **portabili senza modifiche del codice sorgente su x86, ARM e RISC-V**.
+
+## 🧠 Concetti Chiave e Astrazione MLIR
+
+- **Dialetto `linalg` e Semantica Intrinseca:** A differenza del C tradizionale, dove una moltiplicazione tra matrici perde il suo significato matematico diventando un semplice triplo ciclo `for`, `linalg.matmul` dichiara *cosa* calcolare e non *come*. Iterazioni, indicizzazioni e riduzioni sono garantite dall'operazione stessa.
+- **Progressive Lowering:** Il codice passa attraverso multipli livelli di astrazione. Tiling, fusion e parallelizzazione si applicano direttamente ad alto livello, prima di essere abbassati verso il backend LLVM e l'hardware specifico.
+- **Integrazione con `scf`:** Per algoritmi con dipendenze temporali complesse (es. Decomposizione di Cholesky), dove l'approccio *data-parallel* puro non è applicabile, i cicli esterni vengono gestiti con il dialetto imperativo `scf`, mantenendo le operazioni interne in `linalg`.
+
+---
+
+## 📂 Struttura del Repository
+
+La libreria è composta da circa 20 kernel, suddivisi per complessità, tutti validati rispetto a *golden standard* implementati in C.
+
+```text
+.
+├── vector_kernels/               # Operazioni base su vettori
+│   ├── vector_add, vector_dot, vector_scale, vector_min, ecc.
+├── matrix_kernels/               # Operazioni su matrici
+│   ├── mat_mul, mat_trans, mat_swaprow, ecc.
+├── advanced_algorithm_kernels/   # Algoritmi complessi di algebra lineare
+│   ├── cholensky                 # Decomposizione di Cholesky
+│   ├── lu_decomp & lu_solve      # Decomposizione e risoluzione LU
+│   ├── gemv & gemv_trans         # Moltiplicazione matrice-vettore generalizzata
+│   └── svd & Jacobi_SVD          # Decomposizione a Valori Singolari
+└── exec.sh                       # Script di esecuzione automatizzata
+```
+
+Ogni cartella del kernel contiene:
+- `*.mlir`: L'implementazione astratta dell'algoritmo nel framework MLIR.
+- `main.c`: L'implementazione di riferimento in C (golden standard) utilizzata per il test di correttezza.
+- `test/`: Log e file di supporto per la validazione.
+
+---
+
+
+## 🚀 Come Eseguire i Test
+
+Per eseguire i test su architettura **x86**, è necessario avere **MLIR / LLVM** installato e configurato nel proprio ambiente.
+
+Nella root del progetto è presente lo script bash `exec.sh` che si occupa di compilare il sorgente `.mlir`, linkarlo con il `main.c` ed eseguire la validazione:
+
+```bash
+# Esegui lo script bash per validare i kernel
+./exec.sh
+```
+*(Assicurarsi di avere i percorsi di `mlir-opt`, `mlir-translate`, e `clang` configurati correttamente nel PATH o all'interno dello script `exec.sh`).*
+
